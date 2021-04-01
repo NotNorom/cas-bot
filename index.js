@@ -96,7 +96,7 @@ client.on("message", async msg => {
         CONFIG[key] = value;
     } else if (command === "get") {
         if (args.length === 0) { 
-            msg.channel.send(CONFIG);
+            msg.channel.send(JSON.stringify(CONFIG, null, 2), {code: "js"});
         } else if (args.length === 1) {
             let key = args.shift();
             if (!(key in CONFIG)) { return }
