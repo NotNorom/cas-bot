@@ -78,12 +78,14 @@ client.on("message", async msg => {
 
         if (url?.length <= 0) { return }
 
-        let buffer = await download(url);
-        let image = await cas(buffer, CONFIG.strength);
-
-        const attachment = new Discord.MessageAttachment(image, "cas.png");
-
-        msg.channel.send(attachment);
+        try {
+            let buffer = await download(url);
+            let image = await cas(buffer, CONFIG.strength);
+            let attachment = new Discord.MessageAttachment(image, "cas.png");
+            msg.channel.send(attachment);
+        } catch (e) {
+            console.error(e);
+        }
     } else if (command === "set") {
         if (args.length !== 2) { return };
         let key = args.shift();
