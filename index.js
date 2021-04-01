@@ -3,8 +3,12 @@ const client = new Discord.Client();
 require("dotenv").config()
 const cas = require("./cas.js").cas;
 const download = require("./download.js").download;
+const fsp = require("fs/promises")
 
-const PREFIX = ","
+var CONFIG = {
+    prefix: ",",
+    strength: 75,
+}
 
 async function latest_attachement_url(channel) {
     let messages = await channel.messages.fetch({ limit: 30 });
@@ -22,6 +26,16 @@ async function latest_attachement_url(channel) {
     }
 }
 
+async function loadConfig(path) {
+    try {
+        let content = await fsp.readFile(path);
+        let json = await JSON.parse(content);
+        CONFIG = { ...CONFIG, ...json };   
+    } catch (error) {
+        console.error(error);
+    }
+}
+
 
 client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}!`);
@@ -30,9 +44,9 @@ client.on("ready", () => {
 client.on("message", async msg => {
     if (msg.author.bot) { return };
     if (msg.author.id === client.user.id) { return };
-    if (!msg.content.startsWith(PREFIX)) { return };
+    if (!msg.content.startsWith(CONFIG.prefix)) { return };
 
-    let content = msg.content.slice(PREFIX.length);
+    let content = msg.content.slice(CONFIG.prefix.length);
     if (content.length <= 0) { return };
 
     let args = content.split(" ");
@@ -42,9 +56,7 @@ client.on("message", async msg => {
 
     if (command === "ping") {
         msg.reply("pong");
-    }
-
-    if (command === "cas") {
+    } else if (command === "cas") {
         let url = "";
 
         if (args.length === 0 && msg.attachments.size === 0) {
@@ -67,13 +79,40 @@ client.on("message", async msg => {
         if (url?.length <= 0) { return }
 
         let buffer = await download(url);
-        let image = await cas(buffer);
+        let image = await cas(buffer, CONFIG.strength);
 
         const attachment = new Discord.MessageAttachment(image, "cas.png");
 
         msg.channel.send(attachment);
+    } else if (command === "set") {
+        if (args.length !== 2) { return };
+        let key = args.shift();
+        let value = args.shift();
+
+        if (!(key in CONFIG)) { return }
+
+        CONFIG[key] = value;
+    } else if (command === "get") {
+        if (args.length === 0) { 
+            msg.channel.send(CONFIG);
+        } else if (args.length === 1) {
+            let key = args.shift();
+            if (!(key in CONFIG)) { return }
+
+            let value = CONFIG[key];
+            let content = `${key}: ${value}`;
+
+            msg.channel.send(content);
+        }
+    } else if (command === "save") {
+        try {
+            await fsp.writeFile("./config.json", JSON.stringify(CONFIG, null, 4));
+        } catch (e) {
+            console.error(e);
+        }
     }
 });
 
-
-client.login(process.env.DISCORD_TOKEN);
+loadConfig("./config.json")
+    .then(() => client.login(process.env.DISCORD_TOKEN))
+    .catch((e) => console.error(e));
