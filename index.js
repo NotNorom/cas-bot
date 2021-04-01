@@ -37,18 +37,15 @@ client.on("message", async msg => {
 
         // yes, this is supposed to overwrite an url argument
         if (msg.attachments.size > 0) {
-            url = msg.attachments.get(0).url;
+            url = msg.attachments.first().url;
         }
         
         let buffer = await download(url);
-        console.log(buffer, typeof buffer);
-        
         let image = await cas(buffer);
-        console.log(image, typeof image);
 
-        //const attachment = new Discord.MessageAttachment(cas_ed, "cas.png");
+        const attachment = new Discord.MessageAttachment(image, "cas.png");
 
-        //msg.reply(attachment, attachment);
+        msg.reply(attachment);
     }
 });
 
