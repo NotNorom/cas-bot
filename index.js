@@ -30,7 +30,7 @@ async function loadConfig(path) {
     try {
         let content = await fsp.readFile(path);
         let json = await JSON.parse(content);
-        CONFIG = { ...json, ...CONFIG };   
+        CONFIG = { ...CONFIG, ...json };   
     } catch (error) {
         console.error(error);
     }
