@@ -3,15 +3,7 @@ const client = new Discord.Client();
 require("dotenv").config()
 const cas = require("./cas.js").cas;
 const download = require("./download.js").download;
-const fsp = require("fs/promises")
-
-const CONFIG_PATH = "./config.json";
-var CONFIG = {
-    "DEFAULT": {
-        prefix: ",",
-        strength: 69,
-    },
-}
+const config = require("./config.js");
 
 async function latest_attachement_url(channel) {
     let messages = await channel.messages.fetch({ limit: 30 });
@@ -19,7 +11,7 @@ async function latest_attachement_url(channel) {
     let url = messages
         .filter((msg, id) => msg.attachments.size > 0)
         .find((msg, id) => {
-            return (msg.attachments.first()?.url)
+            return (msg.attachments.last()?.url)
         })?.attachments.first().url;
 
     if (url) {
@@ -29,50 +21,19 @@ async function latest_attachement_url(channel) {
     }
 }
 
-async function loadConfig(path) {
-    try {
-        let content = await fsp.readFile(path);
-        let json = await JSON.parse(content);
-        CONFIG = { ...CONFIG, ...json };
-    } catch (error) {
-        console.error(error);
-    }
-}
-
-function conf(guild_id, key = null, value = null) {
-    if (guild_id === undefined || guild_id === null) {
-        guild_id = "DEFAULT";
-    }
-
-    if (!(guild_id in CONFIG)) {
-        CONFIG[guild_id] = { ...CONFIG["DEFAULT"] };
-    }
-
-    if (value === null && key === null) {
-        return CONFIG[guild_id];
-    }
-
-    if (value === null && key !== null) {
-        return CONFIG[guild_id][key];
-    }
-
-    if (value !== null && key !== null) {
-        if (!(key in CONFIG[guild_id])) { return }
-        CONFIG[guild_id][key] = value;
-    }
-}
-
-
 client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}!`);
 });
 
 client.on("message", async msg => {
+    let prefix = config.get(msg, "prefix");
+    console.log(`Prefix for ${msg}: ${prefix}`);
+
     if (msg.author.bot) { return };
     if (msg.author.id === client.user.id) { return };
-    if (!msg.content.startsWith(CONFIG.prefix)) { return };
+    if (!msg.content.startsWith(prefix)) { return };
 
-    let content = msg.content.slice(CONFIG.prefix.length);
+    let content = msg.content.slice(prefix.length);
     if (content.length <= 0) { return };
 
     let args = content.split(" ");
@@ -106,7 +67,7 @@ client.on("message", async msg => {
 
         try {
             let buffer = await download(url);
-            let image = await cas(buffer, CONFIG.strength);
+            let image = await cas(buffer, config.get(msg, "strength"));
             let attachment = new Discord.MessageAttachment(image, "cas.png");
             msg.channel.send(attachment);
         } catch (e) {
@@ -117,35 +78,32 @@ client.on("message", async msg => {
         let key = args.shift();
         let value = args.shift();
 
-        if (!msg.guild.id) {
-            return;
+        if (msg.guild.id) {
+            config.setGuildConfig(msg.guild.id, key, value);
+        } else {
+            config.setUserConfig(msg.author.id, key, value);
         }
-
-        conf(msg.guild.id, key, value);
 
     } else if (command === "get") {
-        if (args.length === 0) {
-            let id = msg.guild?.id || "DEFAULT";
-            msg.channel.send(JSON.stringify(CONFIG[id], null, 2), { code: "js" });
-        } else if (args.length === 1) {
-            let key = args.shift();
-            let value = conf(msg.guild.id, key);
-            if (value === undefined) { return }
-            let content = `${key}: ${value}`;
+        let key = args.shift();
 
-            msg.channel.send(content);
+        let conf;
+        if (msg.guild.id) {
+            conf = config.getGuildConfig(msg.guild.id, key || null);
+        } else {
+            conf = config.getUserConfig(msg.author.id, key || null);
         }
+
+        if (conf === undefined) { return }
+
+        msg.channel.send(JSON.stringify(conf, null, 2), { code: "json" });
     } else if (command === "save") {
-        try {
-            await fsp.writeFile(CONFIG_PATH, JSON.stringify(CONFIG, null, 4));
-        } catch (e) {
-            console.error(e);
-        }
+        await config.saveConfig();
     } else if (command === "load") {
-        await loadConfig(CONFIG_PATH);
+        await config.loadConfig();
     }
 });
 
-loadConfig(CONFIG_PATH)
+config.loadConfig()
     .then(() => client.login(process.env.DISCORD_TOKEN))
     .catch((e) => console.error(e));
