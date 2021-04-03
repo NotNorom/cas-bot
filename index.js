@@ -5,9 +5,12 @@ const cas = require("./cas.js").cas;
 const download = require("./download.js").download;
 const fsp = require("fs/promises")
 
+const CONFIG_PATH = "./config.json";
 var CONFIG = {
-    prefix: ",",
-    strength: 75,
+    "DEFAULT": {
+        prefix: ",",
+        strength: 69,
+    },
 }
 
 async function latest_attachement_url(channel) {
@@ -30,9 +33,32 @@ async function loadConfig(path) {
     try {
         let content = await fsp.readFile(path);
         let json = await JSON.parse(content);
-        CONFIG = { ...CONFIG, ...json };   
+        CONFIG = { ...CONFIG, ...json };
     } catch (error) {
         console.error(error);
+    }
+}
+
+function conf(guild_id, key = null, value = null) {
+    if (guild_id === undefined || guild_id === null) {
+        guild_id = "DEFAULT";
+    }
+
+    if (!(guild_id in CONFIG)) {
+        CONFIG[guild_id] = { ...CONFIG["DEFAULT"] };
+    }
+
+    if (value === null && key === null) {
+        return CONFIG[guild_id];
+    }
+
+    if (value === null && key !== null) {
+        return CONFIG[guild_id][key];
+    }
+
+    if (value !== null && key !== null) {
+        if (!(key in CONFIG[guild_id])) { return }
+        CONFIG[guild_id][key] = value;
     }
 }
 
@@ -91,30 +117,35 @@ client.on("message", async msg => {
         let key = args.shift();
         let value = args.shift();
 
-        if (!(key in CONFIG)) { return }
+        if (!msg.guild.id) {
+            return;
+        }
 
-        CONFIG[key] = value;
+        conf(msg.guild.id, key, value);
+
     } else if (command === "get") {
-        if (args.length === 0) { 
-            msg.channel.send(JSON.stringify(CONFIG, null, 2), {code: "js"});
+        if (args.length === 0) {
+            let id = msg.guild?.id || "DEFAULT";
+            msg.channel.send(JSON.stringify(CONFIG[id], null, 2), { code: "js" });
         } else if (args.length === 1) {
             let key = args.shift();
-            if (!(key in CONFIG)) { return }
-
-            let value = CONFIG[key];
+            let value = conf(msg.guild.id, key);
+            if (value === undefined) { return }
             let content = `${key}: ${value}`;
 
             msg.channel.send(content);
         }
     } else if (command === "save") {
         try {
-            await fsp.writeFile("./config.json", JSON.stringify(CONFIG, null, 4));
+            await fsp.writeFile(CONFIG_PATH, JSON.stringify(CONFIG, null, 4));
         } catch (e) {
             console.error(e);
         }
+    } else if (command === "load") {
+        await loadConfig(CONFIG_PATH);
     }
 });
 
-loadConfig("./config.json")
+loadConfig(CONFIG_PATH)
     .then(() => client.login(process.env.DISCORD_TOKEN))
     .catch((e) => console.error(e));
